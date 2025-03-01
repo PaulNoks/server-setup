@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Запрос имени пользователя и пароля
+read -p "Введите имя нового пользователя: " username
+
+# Создание пользователя
+sudo adduser $username
+sudo usermod -aG sudo $username
+
+# Запрос нового порта SSH
+read -p "Введите новый порт для SSH: " ssh_port
+
+# Изменение порта SSH
+sudo sed -i "s/#Port 22/Port $ssh_port/" /etc/ssh/sshd_config
+
+# Запрос публичного ключа
+read -p "Введите путь к публичному ключу: " pubkey
+
+# Создание директории .ssh и добавление публичного ключа
+sudo mkdir -p /home/$username/.ssh
+sudo touch /home/$username/.ssh/authorized_keys
+sudo bash -c "cat $pubkey > /home/$username/.ssh/authorized_keys"
+sudo chown -R $username:$username /home/$username/.ssh
+sudo chmod 700 /home/$username/.ssh
+sudo chmod 600 /home/$username/.ssh/authorized_keys
+
+# Отключение пароля и root-доступа
+sudo sed -i "s/#PermitRootLogin yes/PermitRootLogin no/" /etc/ssh/sshd_config
+sudo sed -i "/^#PermitRootLogin/s/^#//" /etc/ssh/sshd_config  # Раскомментировать, если строка закомментирована
+sudo sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" /etc/ssh/sshd_config
+sudo sed -i "/^#PasswordAuthentication/s/^#//" /etc/ssh/sshd_config  # Раскомментировать, если строка закомментирована
+
+# Принудительное отключение аутентификации по паролю, если строка отсутствует
+if ! grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config; then
+    echo "PasswordAuthentication no" | sudo tee -a /etc/ssh/sshd_config
+fi
+
+# Поддержка активного SSH-соединения
+if ! grep -q "ClientAliveInterval" /etc/ssh/sshd_config; then
+    echo "ClientAliveInterval 60" | sudo tee -a /etc/ssh/sshd_config
+fi
+
+if ! grep -q "ClientAliveCountMax" /etc/ssh/sshd_config; then
+    echo "ClientAliveCountMax 3" | sudo tee -a /etc/ssh/sshd_config
+fi
+
+# Перезапуск SSH для применения изменений
+sudo systemctl restart ssh
+
+echo "Сервер подготовлен. Используйте 'ssh -p $ssh_port $username@<server_ip>' для подключения."
