@@ -221,6 +221,22 @@ if ! grep -q "^ClientAliveCountMax" /etc/ssh/sshd_config; then
     echo "ClientAliveCountMax 3" | sudo tee -a /etc/ssh/sshd_config
 fi
 
+# Проверка и изменение файлов в директории sshd_config.d
+echo "Проверка дополнительных конфигурационных файлов SSH..."
+if [ -d "/etc/ssh/sshd_config.d/" ]; then
+    for config_file in /etc/ssh/sshd_config.d/*.conf; do
+        if [ -f "$config_file" ]; then
+            echo "Проверка файла: $config_file"
+            # Проверяем наличие настройки PasswordAuthentication
+            if grep -q "PasswordAuthentication yes" "$config_file"; then
+                echo "Найдена настройка PasswordAuthentication yes в файле $config_file. Исправляем..."
+                sudo sed -i "s/PasswordAuthentication yes/PasswordAuthentication no/" "$config_file"
+                echo "Настройка исправлена в $config_file"
+            fi
+        fi
+    done
+fi
+
 # Настройка UFW (Uncomplicated Firewall)
 echo "Настройка UFW..."
 
