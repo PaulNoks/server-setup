@@ -50,9 +50,40 @@ install_nginx_certbot() {
     apt install -y nginx certbot python3-certbot-nginx
 }
 
-# Configure Nginx for Jenkins
+# Configure Nginx for Jenkins (without SSL first)
 configure_nginx() {
     # Create Nginx configuration for Jenkins
+    cat > /etc/nginx/sites-available/jenkins << EOL
+server {
+    listen 80;
+    server_name jenkins.kudahchet.ru;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+EOL
+
+    # Create symbolic link to enable configuration
+    ln -s /etc/nginx/sites-available/jenkins /etc/nginx/sites-enabled/
+
+    # Remove default Nginx site if exists
+    rm -f /etc/nginx/sites-enabled/default
+
+    # Test Nginx configuration
+    nginx -t
+}
+
+# Update Nginx configuration with SSL
+update_nginx_with_ssl() {
     cat > /etc/nginx/sites-available/jenkins << EOL
 server {
     listen 80;
@@ -85,17 +116,21 @@ server {
     }
 }
 EOL
-
-    # Create symbolic link to enable configuration
-    ln -s /etc/nginx/sites-available/jenkins /etc/nginx/sites-enabled/
-
-    # Test Nginx configuration
-    nginx -t
 }
 
 # Obtain SSL Certificate
 obtain_ssl_certificate() {
+    # First, ensure port 80 is open and Nginx is running
+    systemctl start nginx
+
+    # Obtain SSL certificate
     certbot --nginx -d jenkins.kudahchet.ru --non-interactive --agree-tos
+
+    # Update Nginx configuration with SSL
+    update_nginx_with_ssl
+
+    # Test and restart Nginx
+    nginx -t && systemctl restart nginx
 }
 
 # Main installation process
@@ -110,15 +145,15 @@ main() {
     install_nginx_certbot
     configure_nginx
 
+    # Restart services to apply initial configuration
+    systemctl restart nginx
+    systemctl restart jenkins
+
     # Prompt user to obtain SSL certificate
     read -p "Do you want to obtain an SSL certificate now? (y/n): " ssl_choice
     if [[ "$ssl_choice" == "y" ]]; then
         obtain_ssl_certificate
     fi
-
-    # Restart services
-    systemctl restart nginx
-    systemctl restart jenkins
 
     echo "Jenkins installation and Nginx configuration complete!"
 }
