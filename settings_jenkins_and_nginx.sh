@@ -6,6 +6,15 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Prompt for email address for Let's Encrypt
+get_email() {
+    read -p "Enter your email address for Let's Encrypt registration: " email
+    while [[ -z "$email" ]]; do
+        read -p "Email cannot be empty. Enter your email address: " email
+    done
+    echo "$email"
+}
+
 # Function to check DNS resolution
 check_dns() {
     local domain="jenkins.kudahchet.ru"
@@ -120,13 +129,17 @@ EOL
 
 # Obtain SSL Certificate
 obtain_ssl_certificate() {
+    local email=$1
+    
     # First, ensure port 80 is open and Nginx is running
     systemctl start nginx
 
-    # Obtain SSL certificate
-    certbot --nginx -d jenkins.kudahchet.ru --non-interactive --agree-tos
-
-    # Update Nginx configuration with SSL
+    # Obtain SSL certificate with email
+    certbot --nginx -d jenkins.kudahchet.ru \
+            --non-interactive \
+            --agree-tos \
+            --email "$email"
+   # Update Nginx configuration with SSL
     update_nginx_with_ssl
 
     # Test and restart Nginx
@@ -149,13 +162,15 @@ main() {
     systemctl restart nginx
     systemctl restart jenkins
 
-    # Prompt user to obtain SSL certificate
-    read -p "Do you want to obtain an SSL certificate now? (y/n): " ssl_choice
-    if [[ "$ssl_choice" == "y" ]]; then
-        obtain_ssl_certificate
-    fi
+    # Get email for Let's Encrypt
+    EMAIL=$(get_email)
+
+    # Obtain SSL certificate
+    obtain_ssl_certificate "$EMAIL"
 
     echo "Jenkins installation and Nginx configuration complete!"
+    echo "Initial Jenkins admin password:"
+    cat /var/lib/jenkins/secrets/initialAdminPassword
 }
 
 # Run the main function
