@@ -1,4 +1,4 @@
-apt update
+apt update && apt upgrage
 
 # Проверяем применились ли настройки
 echo "Проверка настроек SSH:"
